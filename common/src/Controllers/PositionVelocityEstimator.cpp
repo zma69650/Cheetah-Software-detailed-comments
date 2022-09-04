@@ -123,12 +123,17 @@ void LinearKFPositionVelocityEstimator<T>::run() {
         *(this->_stateEstimatorData.legControllerData->quadruped);
     Vec3<T> ph = quadruped.getHipLocation(i);  // hip positions relative to CoM
     // hw_i->leg_controller->leg_datas[i].p; 
+    //1.全局坐标系下足端相对与机身的位置由腿i正解加上臀部位置，通过机身到全局坐标系的旋转矩阵转化得到
+    //2.观测量中的速度应该表示为足端相对于瞬间机身质心处惯性坐标系的速度，
+    //  如果是足端速度在全局坐标系下速度，应该需要加上机身速度。该速度通过关节速度算出足端末端速度vrel,再通过机身角速度w和旋转矩阵转换到惯性坐标系中
     //足端相对与质心的位置
     Vec3<T> p_rel = ph + this->_stateEstimatorData.legControllerData[i].p;
     // hw_i->leg_controller->leg_datas[i].v;
     Vec3<T> dp_rel = this->_stateEstimatorData.legControllerData[i].v;  
-    //
+    // op1 = op + oRb*bp1  ==> -oRb*bp1 = op - op1
     Vec3<T> p_f = Rbod * p_rel;
+
+  
     Vec3<T> dp_f =
         Rbod *
         (this->_stateEstimatorData.result->omegaBody.cross(p_rel) + dp_rel);
@@ -143,6 +148,10 @@ void LinearKFPositionVelocityEstimator<T>::run() {
     //T trust_window = T(0.25);
     T trust_window = T(0.2);
 
+    // 当腿处于摆动相时，提高腿的位置预测误差方差100倍，
+    // 同时提高观测误差中腿的速度和高度z的观测误差100倍，即在摆动时，腿部位置以观测为准，
+    // 腿部速度和高度z以预测值为准。具体过程如下，对每条腿引入置信度trust和腿支撑状态相位phase,
+    // 摆腿时phase=0，支撑时pahse由0变化到1。
     if (phase < trust_window) {
       trust = phase / trust_window;
     } else if (phase > (T(1) - trust_window)) {
@@ -152,6 +161,10 @@ void LinearKFPositionVelocityEstimator<T>::run() {
     T high_suspect_number(100);
 
     // printf("Trust %d: %.3f\n", i, trust);
+    // 当腿处于摆动状态时，用机身速度表示全局坐标系下腿末端相对机身质心速度，不准，
+    // 所以在摆动状态下将速度观测值的协方差扩大100倍，以预测值为准。在支撑时，质心速度和vf大小相等，
+    // 符号相反，由于观测矩阵中系数取正，所以这里用vf的负值。
+
     Q.block(qindex, qindex, 3, 3) =
         (T(1) + (T(1) - trust) * high_suspect_number) * Q.block(qindex, qindex, 3, 3);
     R.block(rindex1, rindex1, 3, 3) = 1 * R.block(rindex1, rindex1, 3, 3);
@@ -162,6 +175,8 @@ void LinearKFPositionVelocityEstimator<T>::run() {
 
     trusts(i) = trust;
 
+  
+
     _ps.segment(i1, 3) = -p_f;
     _vs.segment(i1, 3) = (1.0f - trust) * v0 + trust * (-dp_f);
     pzs(i) = (1.0f - trust) * (p0(2) + p_f(2));
@@ -170,6 +185,7 @@ void LinearKFPositionVelocityEstimator<T>::run() {
   Eigen::Matrix<T, 28, 1> y;
   //构造 zk+1
   y << _ps, _vs, pzs;
+  //预测过程
   _xhat = _A * _xhat + _B * a;
   Eigen::Matrix<T, 18, 18> At = _A.transpose();
   Eigen::Matrix<T, 18, 18> Pm = _A * _P * At + Q;
