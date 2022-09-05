@@ -189,12 +189,16 @@ void LinearKFPositionVelocityEstimator<T>::run() {
   _xhat = _A * _xhat + _B * a;
   Eigen::Matrix<T, 18, 18> At = _A.transpose();
   Eigen::Matrix<T, 18, 18> Pm = _A * _P * At + Q;
+
   Eigen::Matrix<T, 18, 28> Ct = _C.transpose();
   Eigen::Matrix<T, 28, 1> yModel = _C * _xhat;
+  //e_{k+1}
   Eigen::Matrix<T, 28, 1> ey = y - yModel;
   Eigen::Matrix<T, 28, 28> S = _C * Pm * Ct + R;
 
   // todo compute LU only once
+  // Solve Ax = b. Result stored in x. Matlab: x = A \ b.x = A.lu().solve(b)); 
+  // 这里用LU分解求解线性方程组的方法来求卡尔曼增益逆的部分与e的乘积
   Eigen::Matrix<T, 28, 1> S_ey = S.lu().solve(ey);
   _xhat += Pm * Ct * S_ey;
 

@@ -17,7 +17,7 @@ kalman滤波：  \\
 &P^{-}_{k+1}=A_kP_kA^T_{k}+Q_k \\
 
 更新步：\\ &K_{k+1}=P^{-}_{k+1}C^T_{k+1}[C_{k+1}P^{-}_{k+1}C^T_{k+1}+R_k]^{-1} \\
-&e_{k+1}=z_{k+1}-C_{k+1}x^{-}_{k+1} \\
+&e_{k+1}=y_{k+1}-C_{k+1}x^{-}_{k+1} \\
 &x_{k+1}=x^{-}_{k+1}+K_{k+1}e_{k+1} \\
 &P_{k+1}=(I-K_{k+1}C_{k+1})P^{-}_{k+1}(I-K_{k+1}C_{k+1})^T+K_{k+1}R_{k+1}K_{k+1}^T
 \end{align}
@@ -230,7 +230,7 @@ $$
    R.block(24, 24, 4, 4) = _R0.block(24, 24, 4, 4) * sensor_noise_zfoot;
  ```
 
-* **run** 第二步是构造观测向量 $y_{k+1}$ 并调整协方差 $Q_k$ 、$R_k$ 的大小。其代码如下：  
+* **run** 第二步是构造观测向量 $y_{k+1}$ 并根据摆动相和支持相调整协方差 $Q_k$ 、$R_k$ 的大小。其代码如下：  
 
 ```c++
   for (int i = 0; i < 4; i++) {
@@ -281,7 +281,7 @@ $$
     // 所以在摆动状态下将速度观测值的协方差扩大100倍，以预测值为准。在支撑时，质心速度和vf大小相等，
     // 符号相反，由于观测矩阵中系数取正，所以这里用vf的负值。
 
-    // 当腿处于摆动相时，提高腿的位置预测误差方差100倍，同时提高观测误差中腿的速度和高度z的观测误差100   	 //倍，即在摆动时，腿部位置以观测为准，
+    // 当腿处于摆动相时，提高腿的位置预测误差方差100倍，同时提高观测误差中腿的速度和高度z的观测误差100   	 //倍，即在摆动时，腿部位置以观测为准。
     Q.block(qindex, qindex, 3, 3) =
         (T(1) + (T(1) - trust) * high_suspect_number) * Q.block(qindex, qindex, 3, 3);
       
@@ -293,8 +293,6 @@ $$
 
     trusts(i) = trust;
 
-  
-
     _ps.segment(i1, 3) = -p_f;
     _vs.segment(i1, 3) = (1.0f - trust) * v0 + trust * (-dp_f);
     pzs(i) = (1.0f - trust) * (p0(2) + p_f(2));
@@ -305,7 +303,55 @@ $$
   y << _ps, _vs, pzs;
 ```
 
+* **run** 第三步是卡尔曼滤波，首先是预测步：
 
+```
+  _xhat = _A * _xhat + _B * a;
+  Eigen::Matrix<T, 18, 18> At = _A.transpose();
+  Eigen::Matrix<T, 18, 18> Pm = _A * _P * At + Q;
+```
+
+其次是更新步：
+
+```c++
+  // Solve Ax = b. Result stored in x. Matlab: x = A \ b.x = A.lu().solve(b)); 
+  // 这里用LU分解求解线性方程组的方法来求卡尔曼增益逆的部分与e的乘积
+  Eigen::Matrix<T, 28, 1> S_ey = S.lu().solve(ey);
+  _xhat += Pm * Ct * S_ey;
+
+  Eigen::Matrix<T, 28, 18> S_C = S.lu().solve(_C);
+  _P = (Eigen::Matrix<T, 18, 18>::Identity() - Pm * Ct * S_C) * Pm;
+
+  Eigen::Matrix<T, 18, 18> Pt = _P.transpose();
+  _P = (_P + Pt) / T(2);
+
+  if (_P.block(0, 0, 2, 2).determinant() > T(0.000001)) {
+    _P.block(0, 2, 2, 16).setZero();
+    _P.block(2, 0, 16, 2).setZero();
+    _P.block(0, 0, 2, 2) /= T(10);
+  }
+```
+
+值得注意的是，卡尔曼增益 $K_{k+1}=P^{-}_{k+1}C^T_{k+1} [C_{k+1}P^{-}_{k+1}C^T_{k+1}+R_k]^{-1}$   有需要求逆的部分，Mit 使用了LU分解来实现的。例如，求解一个线性方程 $Ax=b$ ;即 $x=A^{-1}b$ ，在 Eigen 中使用 LU 分解实现求解的代码是：
+
+```
+x = A.lu().solve(b)); 
+```
+
+这里的 $A$ 是 $C_{k+1}P^{-}_{k+1}C^T_{k+1}+R_k$  ，$b$ 是 $e_{k+1}$ 。
+
+* 最后在 **run** 中的一步就是保存滤波结果。其代码如下：
+
+```
+  this->_stateEstimatorData.result->position = _xhat.block(0, 0, 3, 1);
+  this->_stateEstimatorData.result->vWorld = _xhat.block(3, 0, 3, 1);
+  this->_stateEstimatorData.result->vBody =
+      this->_stateEstimatorData.result->rBody *
+      this->_stateEstimatorData.result->vWorld;
+}
+```
+
+* 总结：**run** 中实现了对机器人的位置和速度状态的卡尔曼滤波，首先是读取 $noise$ 参数完善噪声矩阵，然后根据姿态估计器的结果机器人正运动学来计算观测向量 $y_k$ ，接下来是kalman滤波，最后是保存结果。
 
 #### 参考资料
 
