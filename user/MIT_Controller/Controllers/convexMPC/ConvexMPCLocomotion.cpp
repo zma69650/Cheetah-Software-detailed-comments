@@ -481,18 +481,21 @@ void ConvexMPCLocomotion::updateMPCIfNeeded(int *mpcTable, ControlFSMData<float>
   //iterationsBetweenMPC = 30;
   if((iterationCounter % iterationsBetweenMPC) == 0)
   {
+    //获取状态估计的结果
     auto seResult = data._stateEstimator->getResult();
     float* p = seResult.position.data();
-
+    //机器人的速度
     Vec3<float> v_des_robot(_x_vel_des, _y_vel_des,0);
+    //将机器人的速度转为世界坐标系
     Vec3<float> v_des_world = omniMode ? v_des_robot : seResult.rBody.transpose() * v_des_robot;
     //float trajInitial[12] = {0,0,0, 0,0,.25, 0,0,0,0,0,0};
 
 
     //printf("Position error: %.3f, integral %.3f\n", pxy_err[0], x_comp_integral);
-
+    //站立状态下
     if(current_gait == 4)
     {
+      //当前时刻的状态
       float trajInitial[12] = {
         _roll_des,
         _pitch_des /*-hw_i->state_estimator->se_ground_pitch*/,
@@ -501,7 +504,7 @@ void ConvexMPCLocomotion::updateMPCIfNeeded(int *mpcTable, ControlFSMData<float>
         (float)stand_traj[1]/*+(float)fsm->main_control_settings.p_des[1]*/,
         (float)_body_height/*fsm->main_control_settings.p_des[2]*/,
         0,0,0,0,0,0};
-
+      //由当前时刻估算未来时刻的状态，由于是站立，所以状态向量保持不变
       for(int i = 0; i < horizonLength; i++)
         for(int j = 0; j < 12; j++)
           trajAll[12*i+j] = trajInitial[j];
@@ -509,20 +512,21 @@ void ConvexMPCLocomotion::updateMPCIfNeeded(int *mpcTable, ControlFSMData<float>
 
     else
     {
+      //非站立情况
       const float max_pos_error = .1;
       float xStart = world_position_desired[0];
       float yStart = world_position_desired[1];
-
+      //机器人的期望位置与状态估计获取的位置相差不能太大
       if(xStart - p[0] > max_pos_error) xStart = p[0] + max_pos_error;
       if(p[0] - xStart > max_pos_error) xStart = p[0] - max_pos_error;
 
       if(yStart - p[1] > max_pos_error) yStart = p[1] + max_pos_error;
       if(p[1] - yStart > max_pos_error) yStart = p[1] - max_pos_error;
-
+      
       world_position_desired[0] = xStart;
       world_position_desired[1] = yStart;
-
-      float trajInitial[12] = {(float)rpy_comp[0],  // 0
+      //当前时刻的状态向量
+      float trajInitial[12] = {(float)rpy_comp[0],  // 0 //含有补偿的roll和pitch
         (float)rpy_comp[1],    // 1
         _yaw_des,    // 2
         //yawStart,    // 2
@@ -535,7 +539,7 @@ void ConvexMPCLocomotion::updateMPCIfNeeded(int *mpcTable, ControlFSMData<float>
         v_des_world[0],                           // 9
         v_des_world[1],                           // 10
         0};                                       // 11
-
+      //对状态的预测，长度是horizonLength
       for(int i = 0; i < horizonLength; i++)
       {
         for(int j = 0; j < 12; j++)
@@ -549,14 +553,16 @@ void ConvexMPCLocomotion::updateMPCIfNeeded(int *mpcTable, ControlFSMData<float>
         }
         else
         {
+          //预测就是目标时刻的状态=上一时刻的状态+速度*时间
           trajAll[12*i + 3] = trajAll[12 * (i - 1) + 3] + dtMPC * v_des_world[0];
           trajAll[12*i + 4] = trajAll[12 * (i - 1) + 4] + dtMPC * v_des_world[1];
           trajAll[12*i + 2] = trajAll[12 * (i - 1) + 2] + dtMPC * _yaw_turn_rate;
         }
       }
     }
-    Timer solveTimer;
 
+    Timer solveTimer;
+    //根据参数选择求解mpc的方式
     if(_parameters->cmpc_use_sparse > 0.5) {
       solveSparseMPC(mpcTable, data);
     } else {
@@ -568,13 +574,15 @@ void ConvexMPCLocomotion::updateMPCIfNeeded(int *mpcTable, ControlFSMData<float>
 }
 
 void ConvexMPCLocomotion::solveDenseMPC(int *mpcTable, ControlFSMData<float> &data) {
+  //获取状态估计的结果
   auto seResult = data._stateEstimator->getResult();
 
   //float Q[12] = {0.25, 0.25, 10, 2, 2, 20, 0, 0, 0.3, 0.2, 0.2, 0.2};
-
+  //定义权重矩阵
   float Q[12] = {0.25, 0.25, 10, 2, 2, 50, 0, 0, 0.3, 0.2, 0.2, 0.1};
 
   //float Q[12] = {0.25, 0.25, 10, 2, 2, 40, 0, 0, 0.3, 0.2, 0.2, 0.2};
+  //获取参数和状态估计的结果
   float yaw = seResult.rpy[2];
   float* weights = Q;
   float alpha = 4e-5; // make setting eventually
@@ -583,7 +591,7 @@ void ConvexMPCLocomotion::solveDenseMPC(int *mpcTable, ControlFSMData<float> &da
   float* v = seResult.vWorld.data();
   float* w = seResult.omegaWorld.data();
   float* q = seResult.orientation.data();
-
+  //计算 r
   float r[12];
   for(int i = 0; i < 12; i++)
     r[i] = pFoot[i%4][i/4]  - seResult.position[i/4];
@@ -594,7 +602,7 @@ void ConvexMPCLocomotion::solveDenseMPC(int *mpcTable, ControlFSMData<float> &da
     std::cout << "Alpha was set too high (" << alpha << ") adjust to 1e-5\n";
     alpha = 1e-5;
   }
-
+  
   Vec3<float> pxy_act(p[0], p[1], 0);
   Vec3<float> pxy_des(world_position_desired[0], world_position_desired[1], 0);
   //Vec3<float> pxy_err = pxy_act - pxy_des;
@@ -603,6 +611,7 @@ void ConvexMPCLocomotion::solveDenseMPC(int *mpcTable, ControlFSMData<float> &da
 
   Timer t1;
   dtMPC = dt * iterationsBetweenMPC;
+  //又设置了参数，之前在构造函数的时候设置了。
   setup_problem(dtMPC,horizonLength,0.4,120);
   //setup_problem(dtMPC,horizonLength,0.4,650); //DH
   update_x_drag(x_comp_integral);
@@ -612,13 +621,14 @@ void ConvexMPCLocomotion::solveDenseMPC(int *mpcTable, ControlFSMData<float> &da
   }
 
   //printf("pz err: %.3f, pz int: %.3f\n", pz_err, x_comp_integral);
-
+  //设置求解器参数
   update_solver_settings(_parameters->jcqp_max_iter, _parameters->jcqp_rho,
       _parameters->jcqp_sigma, _parameters->jcqp_alpha, _parameters->jcqp_terminate, _parameters->use_jcqp);
   //t1.stopPrint("Setup MPC");
 
   Timer t2;
   //cout << "dtMPC: " << dtMPC << "\n";
+  //重点来了
   update_problem_data_floats(p,v,q,w,r,yaw,weights,trajAll,alpha,mpcTable);
   //t2.stopPrint("Run MPC");
   //printf("MPC Solve time %f ms\n", t2.getMs());
@@ -679,21 +689,25 @@ void ConvexMPCLocomotion::solveSparseMPC(int *mpcTable, ControlFSMData<float> &d
 
 void ConvexMPCLocomotion::initSparseMPC() {
   Mat3<double> baseInertia;
+  //惯性张量
   baseInertia << 0.07, 0, 0,
               0, 0.26, 0,
               0, 0, 0.242;
+  //质量
   double mass = 9;
+  //最大力
   double maxForce = 120;
-
+   
+  //dtTraj是预测未来10步中，每步的时间
   std::vector<double> dtTraj;
   for(int i = 0; i < horizonLength; i++) {
     dtTraj.push_back(dtMPC);
   }
-
+  //权重参数，之后会重新传入
   Vec12<double> weights;
   weights << 0.25, 0.25, 10, 2, 2, 20, 0, 0, 0.3, 0.2, 0.2, 0.2;
   //weights << 0,0,0,1,1,10,0,0,0,0.2,0.2,0;
-
+  //设置_sparseCMPC参数
   _sparseCMPC.setRobotParameters(baseInertia, mass, maxForce);
   _sparseCMPC.setFriction(0.4);
   _sparseCMPC.setWeights(weights, 4e-5);

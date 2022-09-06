@@ -7,6 +7,13 @@ OffsetDurationGait::OffsetDurationGait(int nSegment, Vec4<int> offsets, Vec4<int
   _nIterations(nSegment)
 {
 
+//   变量：
+// currentIteration：当前迭代次数
+// iterationsPerMPC：每段迭代次数
+// _nIterations：一步中有多少段(论文中给出的是10～16)
+// _iteration：当前处于一个步态周期中的第几段
+// _phase：当前在一个步态周期中的百分比
+
   _name = name;
   // allocate memory for MPC gait table
   _mpc_table = new int[nSegment * 4];
@@ -14,6 +21,7 @@ OffsetDurationGait::OffsetDurationGait(int nSegment, Vec4<int> offsets, Vec4<int
   _offsetsFloat = offsets.cast<float>() / (float) nSegment;
   _durationsFloat = durations.cast<float>() / (float) nSegment;
 
+  //初始值为5，一直不变，表示stance和swing各占五段
   _stance = durations[0];
   _swing = nSegment - durations[0];
 }
@@ -162,7 +170,12 @@ int* MixedFrequncyGait::getMpcTable() {
 
 void OffsetDurationGait::setIterations(int iterationsPerMPC, int currentIteration)
 {
+   //一个步态周期需要计算10次mpc，即有10段,计算一次mpc需要进行13次迭代，当前迭代次数为n,求当前处于一个步态周期的第几段m: m=n/13%10  
+   //求一个周期已完成的百分比：p = n%(13*10)/(13*10) 相对于用是 p=当前迭代数/一个步态周期的迭代数
+   //TODO 为什么不是 p = 当前段/一个步态周期的段数，因为前者的范围更宽
   _iteration = (currentIteration / iterationsPerMPC) % _nIterations;
+
+
   _phase = (float)(currentIteration % (iterationsPerMPC * _nIterations)) / (float) (iterationsPerMPC * _nIterations);
 }
 
@@ -188,6 +201,7 @@ int MixedFrequncyGait::getCurrentGaitPhase() {
 
 float OffsetDurationGait::getCurrentSwingTime(float dtMPC, int leg) {
   (void)leg;
+   
   return dtMPC * _swing;
 }
 
@@ -197,6 +211,7 @@ float MixedFrequncyGait::getCurrentSwingTime(float dtMPC, int leg) {
 
 float OffsetDurationGait::getCurrentStanceTime(float dtMPC, int leg) {
   (void) leg;
+
   return dtMPC * _stance;
 }
 

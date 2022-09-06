@@ -296,6 +296,7 @@ Matrix<fpt,13,12> B_ct_r;
 
 void solve_mpc(update_data_t* update, problem_setup* setup)
 {
+  //通过update设置机器人状态对象
   rs.set(update->p, update->v, update->q, update->w, update->r, update->yaw);
 #ifdef K_PRINT_EVERYTHING
 
@@ -316,6 +317,8 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
   quat_to_rpy(rs.q,rpy);
 
   //initial state (13 state representation)
+  //
+  //构造x_0,相当于x(k),这里把重力放进了状态向量当中。
   x_0 << rpy(2), rpy(1), rpy(0), rs.p , rs.w, rs.v, -9.8f;
   I_world = rs.R_yaw * rs.I_body * rs.R_yaw.transpose(); //original
   //I_world = rs.R_yaw.transpose() * rs.I_body * rs.R_yaw;

@@ -24,6 +24,7 @@ void MIT_Controller::initializeController() {
 /**
  * Calculate the commands for the leg controllers using the ControlFSM logic.
  */
+
 void MIT_Controller::runController() {
   // Find the current gait schedule
   _gaitScheduler->step();

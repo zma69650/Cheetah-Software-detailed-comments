@@ -22,6 +22,7 @@ u8 first_run = 1;
 void initialize_mpc()
 {
   //printf("Initializing MPC!\n");
+  //初始化互斥锁
   if(pthread_mutex_init(&problem_cfg_mt,NULL)!=0)
     printf("[MPC ERROR] Failed to initialize problem configuration mutex.\n");
 
@@ -45,6 +46,7 @@ void setup_problem(double dt, int horizon, double mu, double f_max)
   if(first_run)
   {
     first_run = false;
+    //初始化互斥锁
     initialize_mpc();
   }
 
@@ -55,13 +57,14 @@ void setup_problem(double dt, int horizon, double mu, double f_max)
 #endif
 
   //pthread_mutex_lock(&problem_cfg_mt);
-
+  //QP问题的参数
   problem_configuration.horizon = horizon;
   problem_configuration.f_max = f_max;
   problem_configuration.mu = mu;
   problem_configuration.dt = dt;
 
   //pthread_mutex_unlock(&problem_cfg_mt);
+  //根据预测长度horizon重新定义QP问题向量的大小和分配内存
   resize_qp_mats(horizon);
 }
 
@@ -122,6 +125,7 @@ void update_problem_data_floats(float* p, float* v, float* q, float* w,
                                 float* r, float yaw, float* weights,
                                 float* state_trajectory, float alpha, int* gait)
 {
+  //设置update对象
   update.alpha = alpha;
   update.yaw = yaw;
   mint_to_u8(update.gait,gait,4*problem_configuration.horizon);
@@ -132,6 +136,7 @@ void update_problem_data_floats(float* p, float* v, float* q, float* w,
   memcpy((void*)update.r,(void*)r,sizeof(float)*12);
   memcpy((void*)update.weights,(void*)weights,sizeof(float)*12);
   memcpy((void*)update.traj,(void*)state_trajectory, sizeof(float) * 12 * problem_configuration.horizon);
+  //求解mpc
   solve_mpc(&update, &problem_configuration);
   has_solved = 1;
 
