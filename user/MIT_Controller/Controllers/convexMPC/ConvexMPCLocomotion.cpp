@@ -149,6 +149,7 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
     gait = &pacing;
   current_gait = gaitNumber;
 
+  //计算一个步态周步的当前迭代数和完成进度百分比
   gait->setIterations(iterationsBetweenMPC, iterationCounter);
   jumping.setIterations(iterationsBetweenMPC, iterationCounter);
 
@@ -201,13 +202,14 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
   rpy_comp[1] = v_robot[0] * rpy_int[1];
   rpy_comp[0] = v_robot[1] * rpy_int[0] * (gaitNumber!=8);  //turn off for pronking
 
-
+  //足端在世界坐标系下的位置
   for(int i = 0; i < 4; i++) {
     pFoot[i] = seResult.position + 
       seResult.rBody.transpose() * (data._quadruped->getHipLocation(i) + 
           data._legController->datas[i].p);
   }
 
+  //对期望的位置进行积分
   if(gait != &standing) {
     world_position_desired += dt * Vec3<float>(v_des_world[0], v_des_world[1], 0);
   }
@@ -231,6 +233,8 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
   }
 
   // foot placement
+  //获得一个步态周期摆动相的时间=一次MPC的时间*5
+  //一个步态周期有10段，也就是有10次mpc,摆动项占5段。
   for(int l = 0; l < 4; l++)
     swingTimes[l] = gait->getCurrentSwingTime(dtMPC, l);
 
@@ -246,17 +250,23 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
     if(firstSwing[i]) {
       swingTimeRemaining[i] = swingTimes[i];
     } else {
+      //摆动相还剩余的时间。
       swingTimeRemaining[i] -= dt;
     }
     //if(firstSwing[i]) {
     //footSwingTrajectories[i].setHeight(.05);
+    //设置抬腿高度
     footSwingTrajectories[i].setHeight(.06);
     Vec3<float> offset(0, side_sign[i] * .065, 0);
-
+    //得到身体坐标系下的hip关节坐标
     Vec3<float> pRobotFrame = (data._quadruped->getHipLocation(i) + offset);
 
     pRobotFrame[1] += interleave_y[i] * v_abs * interleave_gain;
+
+    //获取一个步态周期的支撑项时长
     float stance_time = gait->getCurrentStanceTime(dtMPC, i);
+
+    //机身旋转yaw后，得到在机身坐标系下的hip坐标
     Vec3<float> pYawCorrected = 
       coordinateRotation(CoordinateAxis::Z, -_yaw_turn_rate* stance_time / 2) * pRobotFrame;
 
@@ -266,6 +276,7 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
     des_vel[1] = _y_vel_des;
     des_vel[2] = 0.0;
 
+    //世界坐标系下hip坐标 以剩余摆动时间内匀速运动来估计
     Vec3<float> Pf = seResult.position + seResult.rBody.transpose() * (pYawCorrected
           + des_vel * swingTimeRemaining[i]);
 
@@ -289,6 +300,7 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
     Pf[1] +=  pfy_rel;
     Pf[2] = -0.003;
     //Pf[2] = 0.0;
+     //最终得到足底的位置，并作为轨迹终点 世界坐标系下的落足点
     footSwingTrajectories[i].setFinalPosition(Pf);
 
   }
@@ -372,15 +384,17 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
       goalSphere->color = {0.2, 1, 0.2, 0.7};
       actualSphere->color = {0.8, 0.2, 0.2, 0.7};
 #endif
+      //计算贝塞尔曲线
       footSwingTrajectories[foot].computeSwingTrajectoryBezier(swingState, swingTimes[foot]);
 
 
       //      footSwingTrajectories[foot]->updateFF(hw_i->leg_controller->leg_datas[foot].q,
       //                                          hw_i->leg_controller->leg_datas[foot].qd, 0); // velocity dependent friction compensation todo removed
       //hw_i->leg_controller->leg_datas[foot].qd, fsm->main_control_settings.variable[2]);
-
+      //获得计算出来的位置和速度
       Vec3<float> pDesFootWorld = footSwingTrajectories[foot].getPosition();
       Vec3<float> vDesFootWorld = footSwingTrajectories[foot].getVelocity();
+      //转为机器人坐标系下
       Vec3<float> pDesLeg = seResult.rBody * (pDesFootWorld - seResult.position) 
         - data._quadruped->getHipLocation(foot);
       Vec3<float> vDesLeg = seResult.rBody * (vDesFootWorld - seResult.vWorld);
@@ -420,7 +434,7 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
         data._legController->commands[foot].vDes = vDesLeg;
         data._legController->commands[foot].kpCartesian = Kp_stance;
         data._legController->commands[foot].kdCartesian = Kd_stance;
-
+        //TODO  f_ff是mpc算法出来的反作用力 
         data._legController->commands[foot].forceFeedForward = f_ff[foot];
         data._legController->commands[foot].kdJoint = Mat3<float>::Identity() * 0.2;
 
@@ -434,6 +448,7 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
         data._legController->commands[foot].kdCartesian = Kd_stance;
       }
       //            cout << "Foot " << foot << " force: " << f_ff[foot].transpose() << "\n";
+      //更新触地状态
       se_contactState[foot] = contactState;
 
       // Update for WBC
