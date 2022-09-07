@@ -235,6 +235,7 @@ inline Matrix<fpt,3,3> cross_mat(Matrix<fpt,3,3> I_inv, Matrix<fpt,3,1> r)
 //continuous time state space matrices.
 void ct_ss_mats(Matrix<fpt,3,3> I_world, fpt m, Matrix<fpt,3,4> r_feet, Matrix<fpt,3,3> R_yaw, Matrix<fpt,13,13>& A, Matrix<fpt,13,12>& B, float x_drag)
 {
+  //构造A矩阵
   A.setZero();
   A(3,9) = 1.f;
   A(11,9) = x_drag;
@@ -243,7 +244,7 @@ void ct_ss_mats(Matrix<fpt,3,3> I_world, fpt m, Matrix<fpt,3,4> r_feet, Matrix<f
 
   A(11,12) = 1.f;
   A.block(0,6,3,3) = R_yaw.transpose();
-
+  //构造B矩阵
   B.setZero();
   Matrix<fpt,3,3> I_inv = I_world.inverse();
 
@@ -320,9 +321,12 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
   //
   //构造x_0,相当于x(k),这里把重力放进了状态向量当中。
   x_0 << rpy(2), rpy(1), rpy(0), rs.p , rs.w, rs.v, -9.8f;
+
+  //从机器人坐标系转到世界坐标系下
   I_world = rs.R_yaw * rs.I_body * rs.R_yaw.transpose(); //original
   //I_world = rs.R_yaw.transpose() * rs.I_body * rs.R_yaw;
   //cout<<rs.R_yaw<<endl;
+  //构造状态方程A、B矩阵
   ct_ss_mats(I_world,rs.m,rs.r_feet,rs.R_yaw,A_ct,B_ct_r, update->x_drag);
 
 
@@ -333,9 +337,11 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
     cout<<"B CT (simplified): \n"<<B_ct_r<<endl;
 #endif
   //QP matrices
+  //构造A_qp B_qp
   c2qp(A_ct,B_ct_r,setup->dt,setup->horizon);
 
   //weights
+  //构造权值矩阵
   Matrix<fpt,13,1> full_weight;
   for(u8 i = 0; i < 12; i++)
     full_weight(i) = update->weights[i];
@@ -343,6 +349,7 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
   S.diagonal() = full_weight.replicate(setup->horizon,1);
 
   //trajectory
+  //期望的状态向量
   for(s16 i = 0; i < setup->horizon; i++)
   {
     for(s16 j = 0; j < 12; j++)
@@ -353,6 +360,7 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
 
 
   //note - I'm not doing the shifting here.
+  //约束上界
   s16 k = 0;
   for(s16 i = 0; i < setup->horizon; i++)
   {
@@ -362,21 +370,25 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
       U_b(5*k + 1) = BIG_NUMBER;
       U_b(5*k + 2) = BIG_NUMBER;
       U_b(5*k + 3) = BIG_NUMBER;
+      //触地z方向最大反作用力为f_max,不触地设置为0
       U_b(5*k + 4) = update->gait[i*4 + j] * setup->f_max;
       k++;
     }
   }
 
-
+  //构造摩擦锥约束
 
   fpt mu = 1.f/setup->mu;
   Matrix<fpt,5,3> f_block;
 
+  //每条腿都有 5个约束
+  
   f_block <<  mu, 0,  1.f,
     -mu, 0,  1.f,
     0,  mu, 1.f,
     0, -mu, 1.f,
     0,   0, 1.f;
+
 
   for(s16 i = 0; i < setup->horizon*4; i++)
   {
@@ -385,7 +397,7 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
 
 
 
-
+  //得到标准二次规划的H矩阵，G矩阵
   qH = 2*(B_qp.transpose()*S*B_qp + update->alpha*eye_12h);
   qg = 2*B_qp.transpose()*S*(A_qp*x_0 - X_d);
 
@@ -397,7 +409,7 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
     jcqp.u = U_b.cast<double>();
     for(s16 i = 0; i < 20*setup->horizon; i++)
       jcqp.l[i] = 0.;
-
+    //设置求解器参数
     jcqp.settings.sigma = update->sigma;
     jcqp.settings.alpha = update->solver_alpha;
     jcqp.settings.terminate = update->terminate;
@@ -612,7 +624,7 @@ void solve_mpc(update_data_t* update, problem_setup* setup)
 
 
 
-
+  //获取结果
   if(update->use_jcqp == 1) {
     for(int i = 0; i < 12 * setup->horizon; i++) {
       q_soln[i] = jcqp.getSolution()[i];

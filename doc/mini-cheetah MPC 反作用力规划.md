@@ -560,6 +560,51 @@ min J &=(x^{T}(k)A^{T}_{qp}+U^TB^{T}_{qp}-X^{ref^T})Q(A_{qp}x(k)+B_{qp}U-X^{ref}
 \end{align}
 $$
 
+上述代价函数有了QP的形式，我们还差一些约束，显然，具体到机器人上，就是每条腿所受反作用力的约束。这里使用摩擦锥模型来表示这些约束。每条腿所受反力 $f_i=[f_{ix} \ f_{iy} \ f_{iz}]$ ， 由于足底反力触地时时需要限制允许的最大反力，摆动时反力需为0。则有：
+$$
+\begin{align}
+如果没触地：\\
+&f_i=0_{3\times 1} \\
+如果触地，对z方向的力作出限制： \\
+&f_{iz}\leq f_{max} \\
+除了对z方向的力作出限制，为保证足底与地面不发生相对滑动，\\
+足底反力的水平分量不能大于其竖直分量与滑动摩擦系数\mu的乘积，即满足摩擦锥条件：\\
+&|f_{ix}|\leq \mu f_{iz} \\
+
+&|f_{iy}|\leq \mu f_{iz} \\
+&f_{iz} > 0 \\
+写成矩阵形式：\\
+& \begin{bmatrix}
+0 \\
+0 \\
+0 \\
+0 \\
+0 \\
+\end{bmatrix} \leq
+\begin{bmatrix}
+-1 & 0 & \mu \\
+0 & -1 & \mu \\
+1 & 0 & \mu \\
+0 & 1 & \mu \\
+0 & 0 & 1 
+\end{bmatrix}
+\begin{bmatrix}
+f_{ix} \\
+f_{iy} \\
+f_{iz}
+\end{bmatrix} \leq
+\begin{bmatrix} 
++\infty \\
++\infty \\
++\infty \\
++\infty \\
+f_{max}
+\end{bmatrix}
+
+
+\end{align}
+$$
+
 * 现在继续代码部分，这部分主要是获取状态估计结果，定义一些参数并通过 **update_problem_data_floats**将设置 **update** 对象,并进入 **solve_mpc** 中，开始构造qp问题并求解。
 
 ```c++
@@ -638,19 +683,160 @@ void ConvexMPCLocomotion::solveDenseMPC(int *mpcTable, ControlFSMData<float> &da
 }
 ```
 
+##### solve_mpc
+
+在 **solve_mpc** 中，根据状态估计的结果和传入的参数来构造 $x_0$ ，调用 ct_ss_mats 构造状态方程的 $A$ 、$B$ 矩阵，调用 c2qp 构造 $A_{qp}$ 、$B_{qp}$ ，构造权值矩阵、期望的状态向量，构造摩擦锥约束。 
+
+```c++
+//通过update设置机器人状态对象
+  rs.set(update->p, update->v, update->q, update->w, update->r, update->yaw);
+#ifdef K_PRINT_EVERYTHING
+
+  printf("-----------------\n");
+    printf("   PROBLEM DATA  \n");
+    printf("-----------------\n");
+    print_problem_setup(setup);
+
+    printf("-----------------\n");
+    printf("    ROBOT DATA   \n");
+    printf("-----------------\n");
+    rs.print();
+    print_update_data(update,setup->horizon);
+#endif
+
+  //roll pitch yaw
+  Matrix<fpt,3,1> rpy;
+  quat_to_rpy(rs.q,rpy);
+
+  //initial state (13 state representation)
+  //
+  //构造x_0,相当于x(k),这里把重力放进了状态向量当中。
+  x_0 << rpy(2), rpy(1), rpy(0), rs.p , rs.w, rs.v, -9.8f;
+
+  //从机器人坐标系转到世界坐标系下
+  I_world = rs.R_yaw * rs.I_body * rs.R_yaw.transpose(); //original
+  //I_world = rs.R_yaw.transpose() * rs.I_body * rs.R_yaw;
+  //cout<<rs.R_yaw<<endl;
+  //构造状态方程A、B矩阵
+  ct_ss_mats(I_world,rs.m,rs.r_feet,rs.R_yaw,A_ct,B_ct_r, update->x_drag);
+
+
+#ifdef K_PRINT_EVERYTHING
+  cout<<"Initial state: \n"<<x_0<<endl;
+    cout<<"World Inertia: \n"<<I_world<<endl;
+    cout<<"A CT: \n"<<A_ct<<endl;
+    cout<<"B CT (simplified): \n"<<B_ct_r<<endl;
+#endif
+  //QP matrices
+  //构造A_qp B_qp
+  c2qp(A_ct,B_ct_r,setup->dt,setup->horizon);
+
+  //weights
+  //构造权值矩阵
+  Matrix<fpt,13,1> full_weight;
+  for(u8 i = 0; i < 12; i++)
+    full_weight(i) = update->weights[i];
+  full_weight(12) = 0.f;
+  S.diagonal() = full_weight.replicate(setup->horizon,1);
+
+  //trajectory
+  //期望的状态向量
+  for(s16 i = 0; i < setup->horizon; i++)
+  {
+    for(s16 j = 0; j < 12; j++)
+      X_d(13*i+j,0) = update->traj[12*i+j];
+  }
+  //cout<<"XD:\n"<<X_d<<endl;
 
 
 
+  //note - I'm not doing the shifting here.
+  //约束上界
+  s16 k = 0;
+  for(s16 i = 0; i < setup->horizon; i++)
+  {
+    for(s16 j = 0; j < 4; j++)
+    {
+      U_b(5*k + 0) = BIG_NUMBER;
+      U_b(5*k + 1) = BIG_NUMBER;
+      U_b(5*k + 2) = BIG_NUMBER;
+      U_b(5*k + 3) = BIG_NUMBER;
+      //触地z方向最大反作用力为f_max,不触地设置为0
+      U_b(5*k + 4) = update->gait[i*4 + j] * setup->f_max;
+      k++;
+    }
+  }
+
+  //构造摩擦锥约束
+
+  fpt mu = 1.f/setup->mu;
+  Matrix<fpt,5,3> f_block;
+
+  //每条腿都有 5个约束
+  
+  f_block <<  mu, 0,  1.f,
+    -mu, 0,  1.f,
+    0,  mu, 1.f,
+    0, -mu, 1.f,
+    0,   0, 1.f;
+
+
+  for(s16 i = 0; i < setup->horizon*4; i++)
+  {
+    fmat.block(i*5,i*3,5,3) = f_block;
+  }
 
 
 
+  //得到标准二次规划的H矩阵，G矩阵
+  qH = 2*(B_qp.transpose()*S*B_qp + update->alpha*eye_12h);
+  qg = 2*B_qp.transpose()*S*(A_qp*x_0 - X_d);
+
+  QpProblem<double> jcqp(setup->horizon*12, setup->horizon*20);
+  if(update->use_jcqp == 1) {
+    jcqp.A = fmat.cast<double>();
+    jcqp.P = qH.cast<double>();
+    jcqp.q = qg.cast<double>();
+    jcqp.u = U_b.cast<double>();
+    for(s16 i = 0; i < 20*setup->horizon; i++)
+      jcqp.l[i] = 0.;
+    //设置求解器参数
+    jcqp.settings.sigma = update->sigma;
+    jcqp.settings.alpha = update->solver_alpha;
+    jcqp.settings.terminate = update->terminate;
+    jcqp.settings.rho = update->rho;
+    jcqp.settings.maxIterations = update->max_iterations;
+    jcqp.runFromDense(update->max_iterations, true, false);
+  }
+
+  //获取结果
+  if(update->use_jcqp == 1) {
+    for(int i = 0; i < 12 * setup->horizon; i++) {
+      q_soln[i] = jcqp.getSolution()[i];
+    }
+  }
 
 
 
+```
 
+至此，MPC求反作用力已结束。最后，将结果保存在：
 
+```c++
+ //保存结果
+  for(int leg = 0; leg < 4; leg++)
+  {
+    Vec3<float> f;
+    for(int axis = 0; axis < 3; axis++)
+      f[axis] = get_solution(leg*3 + axis);
 
+    //printf("[%d] %7.3f %7.3f %7.3f\n", leg, f[0], f[1], f[2]);
 
+    f_ff[leg] = -seResult.rBody * f;
+    // Update for WBC
+    Fr_des[leg] = f;
+  }
+```
 
 ####  参考资料
 
