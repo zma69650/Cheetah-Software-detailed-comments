@@ -213,7 +213,7 @@ void FloatingBaseModel<T>::addDynamicsVars(int count) {
     _agrot.push_back(zero6);
     _IC.push_back(zeroInertia); //多刚体的惯性张量
     _Xup.push_back(eye6);     //从父刚体到子刚体的空间变换矩阵
-    _Xuprot.push_back(eye6);
+    _Xuprot.push_back(eye6);  //从父刚体到子刚体转子的空间变换矩阵
     _Xa.push_back(eye6);  //从世界系到当前关节坐标系的空间变换矩阵
 
     _ChiUp.push_back(eye6);
@@ -412,7 +412,7 @@ int FloatingBaseModel<T>::addBody(const SpatialInertia<T> &inertia,
   _jointTypes.push_back(jointType);  //添加关节的类型
   _jointAxes.push_back(jointAxis);   //添加关节绕本体坐标系的旋转轴
   _Xtree.push_back(Xtree);  //添加刚体内部的常量空间变换
-  _Xrot.push_back(Xrot);  //电机转子的
+  _Xrot.push_back(Xrot);  //电机转子的常量空间变换
   _Ibody.push_back(inertia);//刚体的惯性张量
   _Irot.push_back(rotorInertia);
   _nDof++;//每创建一个刚体就加一个自由度
@@ -489,16 +489,23 @@ void FloatingBaseModel<T>::forwardKinematics() {
   if (_kinematicsUpToDate) return;
 
   // calculate joint transformations
+  //计算身体从世界系到本体系的运动状态的变换矩阵
   _Xup[5] = createSXform(quaternionToRotationMatrix(_state.bodyOrientation),
                          _state.bodyPosition);
+  //身体在空间中的六维速度 由角速度和平动速度组成
   _v[5] = _state.bodyVelocity;
   for (size_t i = 6; i < _nDof; i++) {
     // joint xform
+    //纯旋转矩阵  刚体的坐标系在关节处
+    //计算从 A 到 B 的空间坐标变换，其中 B 绕轴旋转 theta。
     Mat6<T> XJ = jointXform(_jointTypes[i], _jointAxes[i], _state.q[i - 6]);
+    //计算从父刚体到子刚体的运动状态变换矩阵
     _Xup[i] = XJ * _Xtree[i];
+    //_S:关节空间到运动空间的速度映射向量
+    //计算关节运动子空间向量
     _S[i] = jointMotionSubspace<T>(_jointTypes[i], _jointAxes[i]);
     SVec<T> vJ = _S[i] * _state.qd[i - 6];
-    // total velocity of body i
+    // total velocity of body i  子刚体的空间速度  
     _v[i] = _Xup[i] * _v[_parents[i]] + vJ;
 
     // Same for rotors
@@ -510,31 +517,31 @@ void FloatingBaseModel<T>::forwardKinematics() {
     _vrot[i] = _Xuprot[i] * _v[_parents[i]] + vJrot;
 
     // Coriolis accelerations
-    _c[i] = motionCrossProduct(_v[i], vJ);
+    _c[i] = motionCrossProduct(_v[i], vJ);   //子刚体的科氏力加速度
     _crot[i] = motionCrossProduct(_vrot[i], vJrot);
   }
 
   // calculate from absolute transformations
   for (size_t i = 5; i < _nDof; i++) {
     if (_parents[i] == 0) {
-      _Xa[i] = _Xup[i];  // float base
+      _Xa[i] = _Xup[i];  // float base  世界系到身体的空间变换矩阵
     } else {
-      _Xa[i] = _Xup[i] * _Xa[_parents[i]];
+      _Xa[i] = _Xup[i] * _Xa[_parents[i]]; //世界系到刚体i的空间变换矩阵
     }
   }
 
   // ground contact points
-  //  // TODO : we end up inverting the same Xa a few times (like for the 8
+  // TODO : we end up inverting the same Xa a few times (like for the 8
   //  points on the body). this isn't super efficient.
   for (size_t j = 0; j < _nGroundContact; j++) {
     if (!_compute_contact_info[j]) continue;
     size_t i = _gcParent.at(j);
-    Mat6<T> Xai = invertSXform(_Xa[i]);  // from link to absolute
+    Mat6<T> Xai = invertSXform(_Xa[i]);  // from link to absolute 从刚体i到世界系的空间变换矩阵
     SVec<T> vSpatial = Xai * _v[i];
 
     // foot position in world
-    _pGC.at(j) = sXFormPoint(Xai, _gcLocation.at(j));
-    _vGC.at(j) = spatialToLinearVelocity(vSpatial, _pGC.at(j));
+    _pGC.at(j) = sXFormPoint(Xai, _gcLocation.at(j));  //16个点在世界坐标系下的位置
+    _vGC.at(j) = spatialToLinearVelocity(vSpatial, _pGC.at(j)); //16个点在世界系下的速度
   }
   _kinematicsUpToDate = true;
 }
@@ -557,37 +564,40 @@ template <typename T>
 void FloatingBaseModel<T>::contactJacobians() {
   forwardKinematics();
   biasAccelerations();
-
+  //前面8个点表示的是四个hip电机的中心位置上下对称的点  后面八个点分别是四条腿的hip和knee关节刚接连杆的末端位置
   for (size_t k = 0; k < _nGroundContact; k++) {
-    _Jc[k].setZero();
-    _Jcdqd[k].setZero();
+    _Jc[k].setZero();  //每个都是3x18
+    _Jcdqd[k].setZero();  //3x1
 
     // Skip it if we don't care about it
     if (!_compute_contact_info[k]) continue;
 
-    size_t i = _gcParent.at(k);
+    size_t i = _gcParent.at(k); //i= 5 5 5 5 5 5 5 5 7 8 10 11 13 14 16 17
 
     // Rotation to absolute coords
+    //从当前刚体坐标系到世界系的旋转变换矩阵
     Mat3<T> Rai = _Xa[i].template block<3, 3>(0, 0).transpose();
+    //从当前刚体坐标系到世界系的空间变换矩阵
     Mat6<T> Xc = createSXform(Rai, _gcLocation.at(k));
 
     // Bias acceleration
-    SVec<T> ac = Xc * _avp[i];
-    SVec<T> vc = Xc * _v[i];
+    SVec<T> ac = Xc * _avp[i];//刚体i在世界系下的空间加速度
+    SVec<T> vc = Xc * _v[i]; //刚体i在世界系下空间速度
 
-    // Correct to classical
-    _Jcdqd[k] = spatialToLinearAcceleration(ac, vc);
+    // Correct to classical   classical accleration = spatial linear acc + omega x v
+    _Jcdqd[k] = spatialToLinearAcceleration(ac, vc); //工作空间加速度
+
 
     // rows for linear velcoity in the world
-    D3Mat<T> Xout = Xc.template bottomRows<3>();
+    D3Mat<T> Xout = Xc.template bottomRows<3>(); //3x6
 
-    // from tips to base
+    // from tips to base //i的取值为  7 8 10 11 13 14 16 17 
     while (i > 5) {
       _Jc[k].col(i) = Xout * _S[i];
       Xout = Xout * _Xup[i];
       i = _parents[i];
     }
-    _Jc[k].template leftCols<6>() = Xout;
+    _Jc[k].template leftCols<6>() = Xout;    //leftcols(6) 前六列
   }
 }
 
@@ -604,7 +614,7 @@ void FloatingBaseModel<T>::biasAccelerations() {
 
   // from base to tips
   for (size_t i = 6; i < _nDof; i++) {
-    // Outward kinamtic propagtion
+    // Outward kinamtic propagtion 向外运动学传播 欧拉法
     _avp[i] = _Xup[i] * _avp[_parents[i]] + _c[i];
     _avprot[i] = _Xuprot[i] * _avp[_parents[i]] + _crot[i];
   }

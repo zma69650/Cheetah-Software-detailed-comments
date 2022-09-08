@@ -45,7 +45,11 @@ bool Quadruped<T>::buildModel(FloatingBaseModel<T>& model) {
     //              const Mat6<T>& Xtree, const Mat6<T>& Xrot);
     bodyID++;
      //abad关节的内部的常量空间变换矩阵
+     //              R    0
+     // xtreeAbad = 
+     //             -R*r^ R
     Mat6<T> xtreeAbad = createSXform(I3, withLegSigns<T>(_abadLocation, legID));
+    
     Mat6<T> xtreeAbadRotor =
   
     //对应电机转子的常量变换矩阵

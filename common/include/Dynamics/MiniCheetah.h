@@ -105,7 +105,9 @@ Quadruped<T> buildMiniCheetah() {
   cheetah._bodyInertia = bodyInertia;
 
   // locations
-  //确定关节转子和关节刚接连杆的末端位置 ，在关节坐标系下
+  //确定关节转子和关节刚接连杆的末端位置
+  //用于构造从父体到本体的坐标变换
+  //用于构造父体到本体的转子坐标变换
   cheetah._abadRotorLocation = Vec3<T>(0.125, 0.049, 0);
   cheetah._abadLocation =
       Vec3<T>(cheetah._bodyLength, cheetah._bodyWidth, 0) * 0.5;
