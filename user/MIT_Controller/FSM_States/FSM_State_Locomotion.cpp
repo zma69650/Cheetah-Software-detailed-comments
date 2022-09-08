@@ -255,6 +255,7 @@ void FSM_State_Locomotion<T>::LocomotionControlStep() {
   Mat3<T> Kp_backup[4];
   Mat3<T> Kd_backup[4];
 
+  //获得足端规划的结果
   for(int leg(0); leg<4; ++leg){
     pDes_backup[leg] = this->_data->_legController->commands[leg].pDes;
     vDes_backup[leg] = this->_data->_legController->commands[leg].vDes;
@@ -274,6 +275,7 @@ void FSM_State_Locomotion<T>::LocomotionControlStep() {
       _wbc_data->pFoot_des[i] = cMPCOld->pFoot_des[i];
       _wbc_data->vFoot_des[i] = cMPCOld->vFoot_des[i];
       _wbc_data->aFoot_des[i] = cMPCOld->aFoot_des[i];
+      //mpc计算的足端力
       _wbc_data->Fr_des[i] = cMPCOld->Fr_des[i]; 
     }
     _wbc_data->contact_state = cMPCOld->contact_state;

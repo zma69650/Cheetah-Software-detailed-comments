@@ -18,6 +18,7 @@ using namespace spatial;
  * Build a FloatingBaseModel of the quadruped
  */
 template <typename T>
+//TODO 构建浮动基模型的目的是为了求解动力学方程的质量矩阵M,  非惯性和惯性力矩阵，以及接触雅可比矩阵。
 bool Quadruped<T>::buildModel(FloatingBaseModel<T>& model) {
   // we assume the cheetah's body (not including rotors) can be modeled as a
   // uniformly distributed box.
@@ -26,6 +27,7 @@ bool Quadruped<T>::buildModel(FloatingBaseModel<T>& model) {
   // bodyDims));
   model.addBase(_bodyInertia);
   // add contact for the cheetah's body
+  //给浮动基座添加8个点或者说叫做8个坐标 
   model.addGroundContactBoxPoints(5, bodyDims);
 
   const int baseID = 5;
@@ -42,8 +44,11 @@ bool Quadruped<T>::buildModel(FloatingBaseModel<T>& model) {
     //              int parent, JointType jointType, CoordinateAxis jointAxis,
     //              const Mat6<T>& Xtree, const Mat6<T>& Xrot);
     bodyID++;
+     //abad关节的内部的常量空间变换矩阵
     Mat6<T> xtreeAbad = createSXform(I3, withLegSigns<T>(_abadLocation, legID));
     Mat6<T> xtreeAbadRotor =
+  
+    //对应电机转子的常量变换矩阵
         createSXform(I3, withLegSigns<T>(_abadRotorLocation, legID));
 
     if (sideSign < 0) {
@@ -94,7 +99,7 @@ bool Quadruped<T>::buildModel(FloatingBaseModel<T>& model) {
       model.addBody(_kneeInertia, _kneeRotorInertia, _kneeGearRatio, bodyID - 1,
                     JointType::Revolute, CoordinateAxis::Y, xtreeKnee,
                     xtreeKneeRotor);
-
+    //初始时hip关节刚接连杆的末端在hip关节坐标系下的位置。
       model.addGroundContactPoint(bodyID, Vec3<T>(0, -_kneeLinkY_offset, -_kneeLinkLength), true);
     }
 
@@ -103,7 +108,8 @@ bool Quadruped<T>::buildModel(FloatingBaseModel<T>& model) {
 
     sideSign *= -1;
   }
-
+  //添加重力参数
+  //构建浮动基模型的目的是为了求解动力学方程的质量矩阵M,  非惯性和惯性力矩阵，以及接触雅可比矩阵。
   Vec3<T> g(0, 0, -9.81);
   model.setGravity(g);
 

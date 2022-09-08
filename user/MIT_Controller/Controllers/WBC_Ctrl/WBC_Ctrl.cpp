@@ -11,6 +11,7 @@ WBC_Ctrl<T>::WBC_Ctrl(FloatingBaseModel<T> model):
   _wbcLCM(getLcmUrl(255))
 {
   _iter = 0;
+  //19x1
   _full_config.setZero();
 
   _model = model;
@@ -151,7 +152,7 @@ void WBC_Ctrl<T>::_UpdateModel(const StateEstimate<T> & state_est,
     for(size_t leg(0); leg<4; ++leg){
       _state.q[3*leg + i] = leg_data[leg].q[i];
       _state.qd[3*leg + i] = leg_data[leg].qd[i];
-
+      //
       _full_config[3*leg + i + 6] = _state.q[3*leg + i];
     }
   }

@@ -21,24 +21,24 @@ Quadruped<T> buildMiniCheetah() {
   Quadruped<T> cheetah;
   cheetah._robotType = RobotType::MINI_CHEETAH;
 
-  cheetah._bodyMass = 3.3;
-  cheetah._bodyLength = 0.19 * 2;
-  cheetah._bodyWidth = 0.049 * 2;
-  cheetah._bodyHeight = 0.05 * 2;
-  cheetah._abadGearRatio = 6;
-  cheetah._hipGearRatio = 6;
-  cheetah._kneeGearRatio = 9.33;
-  cheetah._abadLinkLength = 0.062;
-  cheetah._hipLinkLength = 0.209;
+  cheetah._bodyMass = 3.3;          //机身质量
+  cheetah._bodyLength = 0.19 * 2;   //身体的长  前后两个hip电机的中心距离
+  cheetah._bodyWidth = 0.049 * 2;   // 宽       左右两个abad电机的中心距离
+  cheetah._bodyHeight = 0.05 * 2;   //高
+  cheetah._abadGearRatio = 6;       //电机减速比
+  cheetah._hipGearRatio = 6;        //电机减速比
+  cheetah._kneeGearRatio = 9.33;    //电机和连杆的减速比
+  cheetah._abadLinkLength = 0.062;  //abad电机中心到hip电机的中心距离
+  cheetah._hipLinkLength = 0.209;   //大腿连杆长度
   //cheetah._kneeLinkLength = 0.175;
   //cheetah._maxLegLength = 0.384;
-  cheetah._kneeLinkY_offset = 0.004;
+  cheetah._kneeLinkY_offset = 0.004; 
   //cheetah._kneeLinkLength = 0.20;
-  cheetah._kneeLinkLength = 0.195;
-  cheetah._maxLegLength = 0.409;
+  cheetah._kneeLinkLength = 0.195;   //小腿连杆长
+  cheetah._maxLegLength = 0.409;     //大腿加小腿的总长
 
 
-  cheetah._motorTauMax = 3.f;
+  cheetah._motorTauMax = 3.f;        
   cheetah._batteryV = 24;
   cheetah._motorKT = .05;  // this is flux linkage * pole pairs
   cheetah._motorR = 0.173;
@@ -55,35 +55,38 @@ Quadruped<T> buildMiniCheetah() {
 
   Mat3<T> RY = coordinateRotation<T>(CoordinateAxis::Y, M_PI / 2);
   Mat3<T> RX = coordinateRotation<T>(CoordinateAxis::X, M_PI / 2);
+  //绕x轴转的转子惯量矩阵
   Mat3<T> rotorRotationalInertiaX =
       RY * rotorRotationalInertiaZ * RY.transpose();
+  //绕x轴转的转子惯量矩阵
   Mat3<T> rotorRotationalInertiaY =
       RX * rotorRotationalInertiaZ * RX.transpose();
 
   // spatial inertias
+  // 数据来自建模
   Mat3<T> abadRotationalInertia;
   abadRotationalInertia << 381, 58, 0.45, 58, 560, 0.95, 0.45, 0.95, 444;
   abadRotationalInertia = abadRotationalInertia * 1e-6;
   Vec3<T> abadCOM(0, 0.036, 0);  // LEFT
   SpatialInertia<T> abadInertia(0.54, abadCOM, abadRotationalInertia);
-
+  //髋关节hip的惯性张量
   Mat3<T> hipRotationalInertia;
   hipRotationalInertia << 1983, 245, 13, 245, 2103, 1.5, 13, 1.5, 408;
   hipRotationalInertia = hipRotationalInertia * 1e-6;
   Vec3<T> hipCOM(0, 0.016, -0.02);
   SpatialInertia<T> hipInertia(0.634, hipCOM, hipRotationalInertia);
-
+  //膝盖关节的惯性张量
   Mat3<T> kneeRotationalInertia, kneeRotationalInertiaRotated;
   kneeRotationalInertiaRotated << 6, 0, 0, 0, 248, 0, 0, 0, 245;
   kneeRotationalInertiaRotated = kneeRotationalInertiaRotated * 1e-6;
   kneeRotationalInertia = RY * kneeRotationalInertiaRotated * RY.transpose();
   Vec3<T> kneeCOM(0, 0, -0.061);
   SpatialInertia<T> kneeInertia(0.064, kneeCOM, kneeRotationalInertia);
-
+ 
   Vec3<T> rotorCOM(0, 0, 0);
   SpatialInertia<T> rotorInertiaX(0.055, rotorCOM, rotorRotationalInertiaX);
   SpatialInertia<T> rotorInertiaY(0.055, rotorCOM, rotorRotationalInertiaY);
-
+  //身体的惯性张量
   Mat3<T> bodyRotationalInertia;
   bodyRotationalInertia << 11253, 0, 0, 0, 36203, 0, 0, 0, 42673;
   bodyRotationalInertia = bodyRotationalInertia * 1e-6;
@@ -94,12 +97,15 @@ Quadruped<T> buildMiniCheetah() {
   cheetah._abadInertia = abadInertia;
   cheetah._hipInertia = hipInertia;
   cheetah._kneeInertia = kneeInertia;
+  //abad绕x轴转
   cheetah._abadRotorInertia = rotorInertiaX;
+  //hip knee绕y轴转
   cheetah._hipRotorInertia = rotorInertiaY;
   cheetah._kneeRotorInertia = rotorInertiaY;
   cheetah._bodyInertia = bodyInertia;
 
   // locations
+  //确定关节转子和关节刚接连杆的末端位置 ，在关节坐标系下
   cheetah._abadRotorLocation = Vec3<T>(0.125, 0.049, 0);
   cheetah._abadLocation =
       Vec3<T>(cheetah._bodyLength, cheetah._bodyWidth, 0) * 0.5;

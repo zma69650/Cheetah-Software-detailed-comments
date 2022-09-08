@@ -3,8 +3,10 @@
 #include <Utilities/pseudoInverse.h>
 
 template <typename T>
+//num_qdot 18
 KinWBC<T>::KinWBC(size_t num_qdot)
     : threshold_(0.001), num_qdot_(num_qdot), num_act_joint_(num_qdot - 6) {
+  //18x18
   I_mtx = DMat<T>::Identity(num_qdot_, num_qdot_);
 }
 
@@ -15,6 +17,7 @@ bool KinWBC<T>::FindConfiguration(
     DVec<T>& jvel_cmd) {
 
   // Contact Jacobian Setup
+  //18x18 
   DMat<T> Nc(num_qdot_, num_qdot_); Nc.setIdentity();
   if(contact_list.size() > 0){
     DMat<T> Jc, Jc_i;

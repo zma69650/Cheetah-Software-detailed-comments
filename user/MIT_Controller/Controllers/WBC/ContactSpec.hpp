@@ -8,6 +8,7 @@
 template <typename T>
 class ContactSpec {
  public:
+ //dim_contact 3
   ContactSpec(size_t dim) : dim_contact_(dim), b_set_contact_(false) {
     idx_Fz_ = dim - 1;  // because normally (tau_x,y,z , linear_x,y,z)
     Fr_des_ = DVec<T>::Zero(dim);

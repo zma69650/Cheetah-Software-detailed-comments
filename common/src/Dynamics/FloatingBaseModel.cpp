@@ -195,26 +195,26 @@ void FloatingBaseModel<T>::addDynamicsVars(int count) {
 
   SpatialInertia<T> zeroInertia(zero66);
   for (int i = 0; i < count; i++) {
-    _v.push_back(zero6);
-    _vrot.push_back(zero6);
-    _a.push_back(zero6);
+    _v.push_back(zero6);  //关节的空间速度
+    _vrot.push_back(zero6); //转子的空间速度
+    _a.push_back(zero6);   //关节的空间加速度
     _arot.push_back(zero6);
-    _avp.push_back(zero6);
-    _avprot.push_back(zero6);
-    _c.push_back(zero6);
+    _avp.push_back(zero6); //连杆质心加速度
+    _avprot.push_back(zero6); //连杆转子质心加速度
+    _c.push_back(zero6);      //非惯性力 包含科氏力与离心力
     _crot.push_back(zero6);
-    _S.push_back(zero6);
+    _S.push_back(zero6);     //关节空间到运动空间的速度映射向量
     _Srot.push_back(zero6);
-    _f.push_back(zero6);
+    _f.push_back(zero6);     //关节受到的空间力
     _frot.push_back(zero6);
-    _fvp.push_back(zero6);
+    _fvp.push_back(zero6);   //连杆质心的空间力
     _fvprot.push_back(zero6);
-    _ag.push_back(zero6);
+    _ag.push_back(zero6);    //连杆所受到的重力
     _agrot.push_back(zero6);
-    _IC.push_back(zeroInertia);
-    _Xup.push_back(eye6);
+    _IC.push_back(zeroInertia); //多刚体的惯性张量
+    _Xup.push_back(eye6);     //从父刚体到子刚体的空间变换矩阵
     _Xuprot.push_back(eye6);
-    _Xa.push_back(eye6);
+    _Xa.push_back(eye6);  //从世界系到当前关节坐标系的空间变换矩阵
 
     _ChiUp.push_back(eye6);
     _d.push_back(0.);
@@ -263,6 +263,7 @@ void FloatingBaseModel<T>::resizeSystemMatricies() {
  * Create the floating body
  * @param inertia Spatial inertia of the floating body
  */
+//创建基座
 template <typename T>
 void FloatingBaseModel<T>::addBase(const SpatialInertia<T> &inertia) {
   if (_nDof) {
@@ -274,24 +275,24 @@ void FloatingBaseModel<T>::addBase(const SpatialInertia<T> &inertia) {
   SpatialInertia<T> zeroInertia(zero6);
   // the floating base has 6 DOFs
 
-  _nDof = 6;
+  _nDof = 6; // 基座的自由度  RPY XYZ
   for (size_t i = 0; i < 6; i++) {
-    _parents.push_back(0);
+    _parents.push_back(0);                //给基座创建刚体编号 0 0 0 0 0 0 6个0
     _gearRatios.push_back(0);
     _jointTypes.push_back(JointType::Nothing);  // doesn't actually matter
     _jointAxes.push_back(CoordinateAxis::X);    // doesn't actually matter
-    _Xtree.push_back(eye6);
-    _Ibody.push_back(zeroInertia);
+    _Xtree.push_back(eye6);                //刚体内部的空间变换矩阵
+    _Ibody.push_back(zeroInertia);         //刚体的惯性张量
     _Xrot.push_back(eye6);
     _Irot.push_back(zeroInertia);
     _bodyNames.push_back("N/A");
   }
-
-  _jointTypes[5] = JointType::FloatingBase;
-  _Ibody[5] = inertia;
-  _gearRatios[5] = 1;
-  _bodyNames[5] = "Floating Base";
-
+   //基座有用的参数
+  _jointTypes[5] = JointType::FloatingBase;  // 基座的关节类型
+  _Ibody[5] = inertia;                       //基座的惯性张量
+  _gearRatios[5] = 1;                        //基座的减速比
+  _bodyNames[5] = "Floating Base";            // 基座的名称
+  //给基座添加动力学参数 
   addDynamicsVars(6);
 }
 
@@ -399,16 +400,22 @@ int FloatingBaseModel<T>::addBody(const SpatialInertia<T> &inertia,
         "addBody got invalid parent: " + std::to_string(parent) +
         " nDofs: " + std::to_string(_nDof) + "\n");
   }
+// _parents[18]= 0 0 0 0 0 0 5 6 7 5 9 10 5 12 13 5 15 16   自由度与刚体编号的对应关系
+// 前六个零代表浮动基座  后面12个每三个一组代表一条腿的三个刚体的编号
+// sideSign表示这个关节是在身体的右侧还是在身体的左侧，-1表示右侧，+1表示左侧，
+// 由于abad这个电机与身体刚接，没有相对位移，因此它的编号为_parents[6]=5; 
+//  同理还有_parents[9]=_parents[12]=_parents[15]=5;
 
-  _parents.push_back(parent);
-  _gearRatios.push_back(gearRatio);
-  _jointTypes.push_back(jointType);
-  _jointAxes.push_back(jointAxis);
-  _Xtree.push_back(Xtree);
-  _Xrot.push_back(Xrot);
-  _Ibody.push_back(inertia);
+
+  _parents.push_back(parent);  //添加刚体编号
+  _gearRatios.push_back(gearRatio);  //添加刚体关节电机的减速比
+  _jointTypes.push_back(jointType);  //添加关节的类型
+  _jointAxes.push_back(jointAxis);   //添加关节绕本体坐标系的旋转轴
+  _Xtree.push_back(Xtree);  //添加刚体内部的常量空间变换
+  _Xrot.push_back(Xrot);  //电机转子的
+  _Ibody.push_back(inertia);//刚体的惯性张量
   _Irot.push_back(rotorInertia);
-  _nDof++;
+  _nDof++;//每创建一个刚体就加一个自由度
 
   addDynamicsVars(1);
 
@@ -475,6 +482,8 @@ T FloatingBaseModel<T>::totalRotorMass() {
  *(from absolute) Also computes _S (motion subspace), _v (spatial velocity in
  *link coordinates), and _c (coriolis acceleration in link coordinates)
  */
+// 利用forwardKinematics()这个函数 求出 父刚体到子刚体的空间变换矩阵、科氏力加速度，刚体i到世界系的空间变换矩阵   
+// 这样就可以求得足端在世界坐标系下的位置和速度
 template <typename T>
 void FloatingBaseModel<T>::forwardKinematics() {
   if (_kinematicsUpToDate) return;

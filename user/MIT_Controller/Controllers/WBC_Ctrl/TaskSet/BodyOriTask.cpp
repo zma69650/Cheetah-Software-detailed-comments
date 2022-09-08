@@ -11,11 +11,13 @@
 template <typename T>
 BodyOriTask<T>::BodyOriTask(const FloatingBaseModel<T>* robot)
     : Task<T>(3), _robot_sys(robot) {
+  //Jt 3x18
   TK::Jt_ = DMat<T>::Zero(TK::dim_task_, cheetah::dim_config);
   TK::Jt_.block(0, 0, 3, 3).setIdentity();
   TK::JtDotQdot_ = DVec<T>::Zero(TK::dim_task_);
-
+   //_kp_kin=[1 1 1]
   _Kp_kin = DVec<T>::Constant(TK::dim_task_, 1.);
+  // _kp=[50 50 50]
   _Kp = DVec<T>::Constant(TK::dim_task_, 50.);
   _Kd = DVec<T>::Constant(TK::dim_task_, 1.);
 }

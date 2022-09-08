@@ -2,14 +2,23 @@
 #include <Utilities/Utilities_print.h>
 
 // [ Fx, Fy, Fz ]
+
 template <typename T>
+/// @brief 
+/// @tparam T 
+/// @param robot 浮动基模型
+/// @param pt  腿的标号
 SingleContact<T>::SingleContact(const FloatingBaseModel<T>* robot, int pt)
     : ContactSpec<T>(3), _max_Fz(1500.), _contact_pt(pt), _dim_U(6) {
   Contact::idx_Fz_ = 2;
   robot_sys_ = robot;
+  //Jc 3x18
   Contact::Jc_ = DMat<T>(Contact::dim_contact_, cheetah::dim_config);
+ //JcDotQDot_ = [0 0 0]
   Contact::JcDotQdot_ = DVec<T>::Zero(Contact::dim_contact_);
+  //Uf 6x3
   Contact::Uf_ = DMat<T>::Zero(_dim_U, Contact::dim_contact_);
+  
 
   T mu(0.4);
 
@@ -34,6 +43,7 @@ SingleContact<T>::~SingleContact() {}
 
 template <typename T>
 bool SingleContact<T>::_UpdateJc() {
+
   Contact::Jc_ = robot_sys_->_Jc[_contact_pt];
 
   // Quat<T> quat = robot_sys_->_state.bodyOrientation;
