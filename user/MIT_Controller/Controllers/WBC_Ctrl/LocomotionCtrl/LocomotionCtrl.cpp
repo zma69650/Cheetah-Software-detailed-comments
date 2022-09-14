@@ -55,6 +55,7 @@ void LocomotionCtrl<T>::_ContactTaskUpdate(void* input, ControlFSMData<T> & data
     // _UpdateTaskJDotQdot();
     // _UpdateCommand(pos_des, vel_des, acc_des);
     // _AdditionalUpdate();
+  //计算误差
   _body_ori_task->UpdateTask(&_quat_des, _input_data->vBody_Ori_des, zero_vec3);
   _body_pos_task->UpdateTask(
       &(_input_data->pBody_des), 
@@ -66,11 +67,13 @@ void LocomotionCtrl<T>::_ContactTaskUpdate(void* input, ControlFSMData<T> & data
 
   for(size_t leg(0); leg<4; ++leg){
     if(_input_data->contact_state[leg] > 0.){ // Contact
+    //支撑相：更新力和接触雅可比
       _foot_contact[leg]->setRFDesired((DVec<T>)(_input_data->Fr_des[leg]));
       _foot_contact[leg]->UpdateContactSpec();
       WBCtrl::_contact_list.push_back(_foot_contact[leg]);
 
     }else{ // No Contact (swing)
+    //摆动相：更新误差
       _foot_task[leg]->UpdateTask(
           &(_input_data->pFoot_des[leg]), 
           _input_data->vFoot_des[leg], 

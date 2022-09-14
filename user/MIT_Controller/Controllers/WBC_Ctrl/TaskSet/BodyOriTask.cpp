@@ -50,6 +50,7 @@ bool BodyOriTask<T>::_UpdateCommand(const void* pos_des, const DVec<T>& vel_des,
   // Configuration space: Local
   // Operational Space: Global
   Mat3<T> Rot = ori::quaternionToRotationMatrix(link_ori);
+  //角速度误差
   Vec3<T> vel_err = Rot.transpose()*(TK::vel_des_ - curr_vel.head(3));
 
   // Rx, Ry, Rz
@@ -78,6 +79,7 @@ bool BodyOriTask<T>::_UpdateCommand(const void* pos_des, const DVec<T>& vel_des,
 
 template <typename T>
 bool BodyOriTask<T>::_UpdateTaskJacobian() {
+  //todo 为啥这个任务的雅可比是这个？
   Quat<T> quat = _robot_sys->_state.bodyOrientation;
   Mat3<T> Rot = ori::quaternionToRotationMatrix(quat);
   TK::Jt_.block(0, 0, 3, 3) = Rot.transpose();

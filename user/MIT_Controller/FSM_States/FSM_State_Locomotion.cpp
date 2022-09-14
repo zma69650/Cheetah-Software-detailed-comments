@@ -269,6 +269,7 @@ void FSM_State_Locomotion<T>::LocomotionControlStep() {
     _wbc_data->aBody_des = cMPCOld->aBody_des;
 
     _wbc_data->pBody_RPY_des = cMPCOld->pBody_RPY_des;
+    //角速度
     _wbc_data->vBody_Ori_des = cMPCOld->vBody_Ori_des;
     
     for(size_t i(0); i<4; ++i){

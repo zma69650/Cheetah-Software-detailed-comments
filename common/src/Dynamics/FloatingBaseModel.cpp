@@ -492,7 +492,7 @@ void FloatingBaseModel<T>::forwardKinematics() {
   //计算身体从世界系到本体系的运动状态的变换矩阵
   _Xup[5] = createSXform(quaternionToRotationMatrix(_state.bodyOrientation),
                          _state.bodyPosition);
-  //身体在空间中的六维速度 由角速度和平动速度组成
+  //身体在空间中的六维速度 由角速度和平动速度组成,前面是角速度，后面是线速度
   _v[5] = _state.bodyVelocity;
   for (size_t i = 6; i < _nDof; i++) {
     // joint xform
@@ -535,7 +535,7 @@ void FloatingBaseModel<T>::forwardKinematics() {
   //  points on the body). this isn't super efficient.
   for (size_t j = 0; j < _nGroundContact; j++) {
     if (!_compute_contact_info[j]) continue;
-    size_t i = _gcParent.at(j);
+    size_t i = _gcParent.at(j);  //i= 5 5 5 5 5 5 5 5 7 8 10 11 13 14 16 17
     Mat6<T> Xai = invertSXform(_Xa[i]);  // from link to absolute 从刚体i到世界系的空间变换矩阵
     SVec<T> vSpatial = Xai * _v[i];
 
@@ -592,6 +592,12 @@ void FloatingBaseModel<T>::contactJacobians() {
     D3Mat<T> Xout = Xc.template bottomRows<3>(); //3x6
 
     // from tips to base //i的取值为  7 8 10 11 13 14 16 17 
+    //接触雅可比矩阵3x18的含义 雅可比矩阵的行是每条腿在空间中的自由度，hip和knee在空间中有两个自由度，
+    //abad电机垂直与hip电机，增加一个维度。雅可比矩阵的前六列是描述浮动基座的，
+
+    // 第6、7、8列是描述右前腿的，第9、10、11l列是描述左前腿的，第12、13、14列是描述右后腿的
+
+    // 第15、16、17列描述左后腿。这些列不是在用一个接触雅可比里面
     while (i > 5) {
       _Jc[k].col(i) = Xout * _S[i];
       Xout = Xout * _Xup[i];
@@ -614,7 +620,7 @@ void FloatingBaseModel<T>::biasAccelerations() {
 
   // from base to tips
   for (size_t i = 6; i < _nDof; i++) {
-    // Outward kinamtic propagtion 向外运动学传播 欧拉法
+    // Outward kinamtic propagtion 
     _avp[i] = _Xup[i] * _avp[_parents[i]] + _c[i];
     _avprot[i] = _Xuprot[i] * _avp[_parents[i]] + _crot[i];
   }
@@ -778,7 +784,8 @@ void FloatingBaseModel<T>::compositeInertias() {
     _IC[i].setMatrix(_Ibody[i].getMatrix());
   }
 
-  // backward loop
+  // backward loop  
+  //TODO 这里第二_IC是不是应是是_Irot
   for (size_t i = _nDof - 1; i > 5; i--) {
     // Propagate inertia down the tree
     _IC[_parents[i]].addMatrix(_Xup[i].transpose() * _IC[i].getMatrix() *
@@ -823,7 +830,7 @@ DMat<T> FloatingBaseModel<T>::massMatrix() {
 
     // Force on floating base
     _H.template block<6, 1>(0, j) = f;
-    _H.template block<1, 6>(j, 0) = f.adjoint();
+    _H.template block<1, 6>(j, 0) = f.adjoint();// 共轭转置 
   }
   return _H;
 }

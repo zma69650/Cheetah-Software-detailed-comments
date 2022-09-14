@@ -17,7 +17,7 @@ bool KinWBC<T>::FindConfiguration(
     DVec<T>& jvel_cmd) {
 
   // Contact Jacobian Setup
-  //18x18 
+  //18x18 求接触总的雅可比和投影矩阵N1
   DMat<T> Nc(num_qdot_, num_qdot_); Nc.setIdentity();
   if(contact_list.size() > 0){
     DMat<T> Jc, Jc_i;
@@ -32,7 +32,7 @@ bool KinWBC<T>::FindConfiguration(
       num_rows += num_new_rows;
     }
 
-    // Projection Matrix
+    // Projection Matrix  投影矩阵
     _BuildProjectionMatrix(Jc, Nc);
   }
 
@@ -42,6 +42,7 @@ bool KinWBC<T>::FindConfiguration(
 
   Task<T>* task = task_list[0];
   task->getTaskJacobian(Jt);
+  //J2|1=J2*N1=J2*(I-J1(+)J1)
   JtPre = Jt * Nc;
   _PseudoInverse(JtPre, JtPre_pinv);
 
