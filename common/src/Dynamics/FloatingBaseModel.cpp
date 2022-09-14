@@ -642,13 +642,14 @@ DVec<T> FloatingBaseModel<T>::generalizedGravityForce() {
   _ag[5] = _Xup[5] * aGravity;
 
   // Gravity comp force is the same as force required to accelerate
-  // oppostite gravity
+  // oppostite gravity  要加负号
   _G.template topRows<6>() = -_IC[5].getMatrix() * _ag[5];
   for (size_t i = 6; i < _nDof; i++) {
+    //子刚体受到的重力
     _ag[i] = _Xup[i] * _ag[_parents[i]];
     _agrot[i] = _Xuprot[i] * _ag[_parents[i]];
 
-    // body and rotor
+    // body and rotor 投影到轴上
     _G[i] = -_S[i].dot(_IC[i].getMatrix() * _ag[i]) -
             _Srot[i].dot(_Irot[i].getMatrix() * _agrot[i]);
   }
@@ -816,7 +817,7 @@ DMat<T> FloatingBaseModel<T>::massMatrix() {
     // f = spatial force required for a unit qdd_j
     SVec<T> f = _IC[j].getMatrix() * _S[j];
     SVec<T> frot = _Irot[j].getMatrix() * _Srot[j];
-
+    //TODO 为什么是他们两个相加了，看作一个整体么？
     _H(j, j) = _S[j].dot(f) + _Srot[j].dot(frot);
 
     // Propagate down the tree

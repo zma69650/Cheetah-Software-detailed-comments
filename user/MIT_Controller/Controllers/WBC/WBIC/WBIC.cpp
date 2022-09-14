@@ -28,7 +28,7 @@ void WBIC<T>::MakeTorque(DVec<T>& cmd, void* extra_input) {
   DVec<T> qddot_pre;
   DMat<T> JcBar;
   DMat<T> Npre;
-
+  //接触项的维数
   if (_dim_rf > 0) {
     // Contact Setting
     _ContactBuilding();
@@ -228,6 +228,7 @@ void WBIC<T>::_GetSolution(const DVec<T>& qddot, DVec<T>& cmd) {
     // get Reaction forces
     for (size_t i(0); i < _dim_rf; ++i)
       _data->_Fr[i] = z[i + _dim_floating] + _Fr_des[i];
+    //浮动基模型
     tot_tau =
       WB::A_ * qddot + WB::cori_ + WB::grav_ - _Jc.transpose() * _data->_Fr;
 
@@ -279,14 +280,18 @@ void WBIC<T>::UpdateSetting(const DMat<T>& A, const DMat<T>& Ainv,
 template <typename T>
 void WBIC<T>::_SetOptimizationSize() {
   // Dimension
-  _dim_rf = 0;
+  _dim_rf = 0;  //接触项的维数
   _dim_Uf = 0;  // Dimension of inequality constraint
   for (size_t i(0); i < (*_contact_list).size(); ++i) {
-    _dim_rf += (*_contact_list)[i]->getDim();
-    _dim_Uf += (*_contact_list)[i]->getDimRFConstraint();
-  }
 
+    _dim_rf += (*_contact_list)[i]->getDim();  //一个接触项维数+3
+
+    _dim_Uf += (*_contact_list)[i]->getDimRFConstraint();  //一个约束维数 +6
+  }
+  //_dim_floating  6
+  //_dim_opt= 6 + _dim_rf
   _dim_opt = _dim_floating + _dim_rf;
+  //_dim_eq_cstr   6
   _dim_eq_cstr = _dim_floating;
 
   // Matrix Setting
