@@ -496,6 +496,7 @@ void FloatingBaseModel<T>::forwardKinematics() {
   _v[5] = _state.bodyVelocity;
   for (size_t i = 6; i < _nDof; i++) {
     // joint xform
+    //step1. 获取父刚体到子刚体的变换矩阵
     //纯旋转矩阵  刚体的坐标系在关节处
     //计算从 A 到 B 的空间坐标变换，其中 B 绕轴旋转 theta。
     Mat6<T> XJ = jointXform(_jointTypes[i], _jointAxes[i], _state.q[i - 6]);
@@ -505,7 +506,8 @@ void FloatingBaseModel<T>::forwardKinematics() {
     //计算关节运动子空间向量
     _S[i] = jointMotionSubspace<T>(_jointTypes[i], _jointAxes[i]);
     SVec<T> vJ = _S[i] * _state.qd[i - 6];
-    // total velocity of body i  子刚体的空间速度  
+    //step2. 根据父刚体的速度应用牛顿欧拉递推子刚体的速度和科氏力加速度
+    // total velocity of body i  子刚体的空间速度    欧拉
     _v[i] = _Xup[i] * _v[_parents[i]] + vJ;
 
     // Same for rotors
@@ -529,7 +531,7 @@ void FloatingBaseModel<T>::forwardKinematics() {
       _Xa[i] = _Xup[i] * _Xa[_parents[i]]; //世界系到刚体i的空间变换矩阵
     }
   }
-
+  //step3. 计算末端的速度位置和线速度
   // ground contact points
   // TODO : we end up inverting the same Xa a few times (like for the 8
   //  points on the body). this isn't super efficient.
@@ -541,7 +543,7 @@ void FloatingBaseModel<T>::forwardKinematics() {
 
     // foot position in world
     _pGC.at(j) = sXFormPoint(Xai, _gcLocation.at(j));  //16个点在世界坐标系下的位置
-    _vGC.at(j) = spatialToLinearVelocity(vSpatial, _pGC.at(j)); //16个点在世界系下的速度
+    _vGC.at(j) = spatialToLinearVelocity(vSpatial, _pGC.at(j)); //16个点在世界系下的线速度
   }
   _kinematicsUpToDate = true;
 }
