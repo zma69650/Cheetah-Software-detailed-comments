@@ -602,10 +602,10 @@ void FloatingBaseModel<T>::contactJacobians() {
     // 第15、16、17列描述左后腿。这些列不是在用一个接触雅可比里面
     while (i > 5) {
       _Jc[k].col(i) = Xout * _S[i];
-      Xout = Xout * _Xup[i];
+      Xout = Xout * _Xup[i];//从父刚体坐标系到世界系的空间变换矩阵的下半部分
       i = _parents[i];
     }
-    _Jc[k].template leftCols<6>() = Xout;    //leftcols(6) 前六列
+    _Jc[k].template leftCols<6>() = Xout;    //leftcols(6) 前六列//从浮动基坐标系到世界系的空间变换矩阵的下半部分
   }
 }
 
@@ -804,10 +804,12 @@ void FloatingBaseModel<T>::compositeInertias() {
  */
 template <typename T>
 DMat<T> FloatingBaseModel<T>::massMatrix() {
+  //step1. 计算在父刚体坐标系下的子刚体的惯性张量
   compositeInertias();
   _H.setZero();
 
   // Top left corner is the locked inertia of the whole system
+  //质量矩阵的左上角是浮动基的惯性张量
   _H.template topLeftCorner<6, 6>() = _IC[5].getMatrix();
 
   for (size_t j = 6; j < _nDof; j++) {
