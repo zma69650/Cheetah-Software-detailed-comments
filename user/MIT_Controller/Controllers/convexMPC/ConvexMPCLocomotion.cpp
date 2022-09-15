@@ -434,7 +434,7 @@ void ConvexMPCLocomotion::run(ControlFSMData<float>& data) {
         data._legController->commands[foot].vDes = vDesLeg;
         data._legController->commands[foot].kpCartesian = Kp_stance;
         data._legController->commands[foot].kdCartesian = Kd_stance;
-        //TODO  f_ff是mpc算法出来的反作用力 
+        //TODO  f_ff / forceFeedForward是mpc算法出来的反作用力 
         data._legController->commands[foot].forceFeedForward = f_ff[foot];
         data._legController->commands[foot].kdJoint = Mat3<float>::Identity() * 0.2;
 

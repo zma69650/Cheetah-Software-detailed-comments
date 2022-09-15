@@ -130,13 +130,14 @@ void LegController<T>::updateData(const TiBoardData* tiBoardData) {
 template <typename T>
 void LegController<T>::updateCommand(SpiCommand* spiCommand) {
   for (int leg = 0; leg < 4; leg++) {
-    // tauFF
+    // tauFF 
     Vec3<T> legTorque = commands[leg].tauFeedForward;
 
     // forceFF
+    //TODO  f_ff / forceFeedForward是mpc算法出来的反作用力 使用wbc的这项为零  不使用wbc上面一项为0  用于支撑项
     Vec3<T> footForce = commands[leg].forceFeedForward;
 
-    // cartesian PD
+    // cartesian PD   
     footForce +=
         commands[leg].kpCartesian * (commands[leg].pDes - datas[leg].p);
     footForce +=

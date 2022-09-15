@@ -36,6 +36,7 @@ void WBIC<T>::MakeTorque(DVec<T>& cmd, void* extra_input) {
     // Set inequality constraints
     _SetInEqualityConstraint();
     WB::_WeightedInverse(_Jc, WB::Ainv_, JcBar);
+    //接触项的工作空间加速度 _JcDotQdot: 包含了所有支撑相的足端加速度
     qddot_pre = JcBar * (-_JcDotQdot);
     Npre = _eye - JcBar * _Jc;
     // pretty_print(JcBar, std::cout, "JcBar");
@@ -55,7 +56,9 @@ void WBIC<T>::MakeTorque(DVec<T>& cmd, void* extra_input) {
     task = (*_task_list)[i];
 
     task->getTaskJacobian(Jt);
+    //ori pos 任务xddot 为0   contact foot 任务为足端加速度 3x1 
     task->getTaskJacobianDotQdot(JtDotQdot);
+    
     task->getCommand(xddot);
 
     JtPre = Jt * Npre;
@@ -171,18 +174,24 @@ void WBIC<T>::_ContactBuilding() {
   DMat<T> Jc;
   DVec<T> JcDotQdot;
   size_t dim_accumul_rf, dim_accumul_uf;
+  //获得雅可比矩阵 3x18
   (*_contact_list)[0]->getContactJacobian(Jc);
+  //工作空间加速度 3x1  
   (*_contact_list)[0]->getJcDotQdot(JcDotQdot);
+  //获得Uf 6x3
   (*_contact_list)[0]->getRFConstraintMtx(Uf);
+  //Uf_ieq_vec 6x1
   (*_contact_list)[0]->getRFConstraintVec(Uf_ieq_vec);
 
-  dim_accumul_rf = (*_contact_list)[0]->getDim();
-  dim_accumul_uf = (*_contact_list)[0]->getDimRFConstraint();
-
+  dim_accumul_rf = (*_contact_list)[0]->getDim(); //3
+  dim_accumul_uf = (*_contact_list)[0]->getDimRFConstraint(); //6
+   //_Jc 3nx18 n: 支撑相的个数
   _Jc.block(0, 0, dim_accumul_rf, WB::num_qdot_) = Jc;
+  //_JcDotQdot 3nx1 
   _JcDotQdot.head(dim_accumul_rf) = JcDotQdot;
   _Uf.block(0, 0, dim_accumul_uf, dim_accumul_rf) = Uf;
   _Uf_ieq_vec.head(dim_accumul_uf) = Uf_ieq_vec;
+  //_Fr_des 3nx1
   _Fr_des.head(dim_accumul_rf) = (*_contact_list)[0]->getRFDesired();
 
   size_t dim_new_rf, dim_new_uf;
@@ -254,11 +263,11 @@ void WBIC<T>::_SetCost() {
   // Set Cost
   size_t idx_offset(0);
   for (size_t i(0); i < _dim_floating; ++i) {
-    G[i + idx_offset][i + idx_offset] = _data->_W_floating[i];
+    G[i + idx_offset][i + idx_offset] = _data->_W_floating[i]; //_W_floating: 0.1 0.1 0.1 0.1 0.1 0.1 
   }
   idx_offset += _dim_floating;
   for (size_t i(0); i < _dim_rf; ++i) {
-    G[i + idx_offset][i + idx_offset] = _data->_W_rf[i];
+    G[i + idx_offset][i + idx_offset] = _data->_W_rf[i]; //_W_rf: 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.  
   }
   // pretty_print(_data->_W_floating, std::cout, "W floating");
   // pretty_print(_data->_W_rf, std::cout, "W rf");
@@ -295,26 +304,39 @@ void WBIC<T>::_SetOptimizationSize() {
   _dim_eq_cstr = _dim_floating;
 
   // Matrix Setting
+  //G (6+3n)x(6+3n)
   G.resize(0., _dim_opt, _dim_opt);
+  //g0 (6+3n)x1
   g0.resize(0., _dim_opt);
+  //CE (6+3n)x6
   CE.resize(0., _dim_opt, _dim_eq_cstr);
+  //ce0 6x1
   ce0.resize(0., _dim_eq_cstr);
 
   // Eigen Matrix Setting
+  //_dyn_CE 6x(6+_dim_rf)
   _dyn_CE = DMat<T>::Zero(_dim_eq_cstr, _dim_opt);
   _dyn_ce0 = DVec<T>(_dim_eq_cstr);
   if (_dim_rf > 0) {
+    //CI (6+3n)x6n
     CI.resize(0., _dim_opt, _dim_Uf);
+    //ci0 6nx1
     ci0.resize(0., _dim_Uf);
+    //_dyn_CI 6nx(6+3n)
     _dyn_CI = DMat<T>::Zero(_dim_Uf, _dim_opt);
+    //_dyn_ci0 6nx1
     _dyn_ci0 = DVec<T>(_dim_Uf);
-
+    //_Jc 3nx18
     _Jc = DMat<T>(_dim_rf, WB::num_qdot_);
+    //_JcDotQdot 3nx1 
     _JcDotQdot = DVec<T>(_dim_rf);
-    _Fr_des = DVec<T>(_dim_rf);
 
+    //3nx1
+    _Fr_des = DVec<T>(_dim_rf);
+    // 6nx3n
     _Uf = DMat<T>(_dim_Uf, _dim_rf);
     _Uf.setZero();
+    //6nx1
     _Uf_ieq_vec = DVec<T>(_dim_Uf);
   } else {
     CI.resize(0., _dim_opt, 1);

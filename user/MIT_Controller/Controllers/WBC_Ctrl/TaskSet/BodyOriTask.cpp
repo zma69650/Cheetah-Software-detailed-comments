@@ -14,6 +14,7 @@ BodyOriTask<T>::BodyOriTask(const FloatingBaseModel<T>* robot)
   //Jt 3x18
   TK::Jt_ = DMat<T>::Zero(TK::dim_task_, cheetah::dim_config);
   TK::Jt_.block(0, 0, 3, 3).setIdentity();
+  //dim_task_ 3 
   TK::JtDotQdot_ = DVec<T>::Zero(TK::dim_task_);
    //_kp_kin=[1 1 1]
   _Kp_kin = DVec<T>::Constant(TK::dim_task_, 1.);
