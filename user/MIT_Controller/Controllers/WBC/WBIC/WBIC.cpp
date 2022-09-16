@@ -58,7 +58,7 @@ void WBIC<T>::MakeTorque(DVec<T>& cmd, void* extra_input) {
     task->getTaskJacobian(Jt);
     //ori pos 任务xddot 为0   contact foot 任务为足端加速度 3x1 
     task->getTaskJacobianDotQdot(JtDotQdot);
-    
+    //wbc加速度项中的x^{..}
     task->getCommand(xddot);
 
     JtPre = Jt * Npre;
