@@ -632,6 +632,7 @@ void FloatingBaseModel<T>::biasAccelerations() {
 /*!
  * Computes the generalized gravitational force (G) in the inverse dynamics
  * @return G (_nDof x 1 vector)
+ * 参考：https://www.zhihu.com/column/c_1376840673417629696
  */
 template <typename T>
 DVec<T> FloatingBaseModel<T>::generalizedGravityForce() {
@@ -659,6 +660,7 @@ DVec<T> FloatingBaseModel<T>::generalizedGravityForce() {
 /*!
  * Computes the generalized coriolis forces (Cqd) in the inverse dynamics
  * @return Cqd (_nDof x 1 vector)
+ * 参考：https://www.zhihu.com/column/c_1376840673417629696
  */
 template <typename T>
 DVec<T> FloatingBaseModel<T>::generalizedCoriolisForce() {
@@ -810,7 +812,7 @@ DMat<T> FloatingBaseModel<T>::massMatrix() {
   _H.setZero();
 
   // Top left corner is the locked inertia of the whole system
-  //质量矩阵的左上角是浮动基的惯性张量
+  //质量矩阵的左上角是I_0^c
   _H.template topLeftCorner<6, 6>() = _IC[5].getMatrix();
 
   for (size_t j = 6; j < _nDof; j++) {
