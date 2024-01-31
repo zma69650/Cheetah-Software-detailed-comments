@@ -1,3 +1,0 @@
-commit 2846ab19e3ecb2b61eee19559c85761ffaf31eb6
-from https://github.com/oxfordcontrol/osqp.git
-
